@@ -11,6 +11,7 @@ type Factory struct {
 	queues       map[string]contracts.Queue
 	queueDrivers map[string]contracts.QueueDriver
 	config       Config
+	serializer   contracts.JobSerializer
 }
 
 func (factory *Factory) Connection(name ...string) contracts.Queue {
@@ -18,7 +19,7 @@ func (factory *Factory) Connection(name ...string) contracts.Queue {
 		return factory.Queue(name[0])
 	}
 
-	return factory.Queue(factory.config.Default)
+	return factory.Queue(factory.config.Defaults.Connection)
 }
 
 func (factory *Factory) Queue(name string) contracts.Queue {
@@ -28,9 +29,12 @@ func (factory *Factory) Queue(name string) contracts.Queue {
 
 	config := factory.config.Connections[name]
 	driver := utils.GetStringField(config, "driver")
+	if config["default"] == nil {
+		config["default"] = factory.config.Defaults.Queue
+	}
 
 	if queueDriver, exists := factory.queueDrivers[driver]; exists {
-		factory.queues[name] = queueDriver(config)
+		factory.queues[name] = queueDriver(name, config, factory.serializer)
 		return factory.queues[name]
 	}
 

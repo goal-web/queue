@@ -2,11 +2,29 @@ package queue
 
 import "github.com/goal-web/contracts"
 
+type WorkerConfig struct {
+	Connection string
+	Queue      []string
+	Processes  int
+	Tries      int
+	Timeout    int
+}
+
+type Workers map[string]WorkerConfig
+
+type FailedJobs struct {
+	Database string
+	Table    string
+}
+
+type Defaults struct {
+	Connection string
+	Queue      string
+}
+
 type Config struct {
-	Default     string
+	Defaults    Defaults
 	Connections map[string]contracts.Fields
-	Failed      struct {
-		Database string
-		Table    string
-	}
+	Failed      FailedJobs
+	Workers     map[string]Workers
 }

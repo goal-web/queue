@@ -9,3 +9,7 @@ type Exception struct {
 type DriverException struct {
 	contracts.Exception
 }
+
+type JobException struct {
+	contracts.Exception
+}
