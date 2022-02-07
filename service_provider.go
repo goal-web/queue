@@ -35,6 +35,12 @@ func (this *ServiceProvider) Register(application contracts.Application) {
 }
 
 func (this *ServiceProvider) Start() error {
+	this.runWorkers()
+	return nil
+}
+
+// runWorkers 运行所有 worker
+func (this *ServiceProvider) runWorkers() {
 	this.app.Call(func(factory contracts.QueueFactory, config contracts.Config, handler contracts.ExceptionHandler) {
 		queueConfig := config.Get("queue").(Config)
 		env := this.app.Environment()
@@ -47,7 +53,6 @@ func (this *ServiceProvider) Start() error {
 			}
 		}
 	})
-	return nil
 }
 
 func (this *ServiceProvider) Stop() {
