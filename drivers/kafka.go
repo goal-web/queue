@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/goal-web/contracts"
 	"github.com/goal-web/supports/logs"
+	"github.com/goal-web/supports/utils"
 	"github.com/segmentio/kafka-go"
 	"time"
 )
@@ -82,53 +83,51 @@ func (this *Kafka) Push(job contracts.Job, queue ...string) {
 }
 
 func (this *Kafka) PushOn(queue string, job contracts.Job) {
+	this.LaterOn(queue, time.Now(), job)
+}
+
+func (this *Kafka) PushRaw(payload, queue string, options ...contracts.Fields) error {
+	err := this.getWriter().WriteMessages(context.Background(), kafka.Message{
+		Topic: queue,
+		Key:   []byte(utils.RandStr(5)),
+		Value: []byte(payload),
+	})
+	if err != nil {
+		logs.WithError(err).
+			WithField("queue", queue).
+			WithField("payload", payload).
+			Debug("push on queue failed")
+	}
+	return err
+}
+
+func (this *Kafka) Later(delay time.Time, job contracts.Job, queue ...string) {
+	this.LaterOn(this.getQueue(queue, job.GetQueue()), delay, job)
+}
+
+func (this *Kafka) LaterOn(queue string, delay time.Time, job contracts.Job) {
 	err := this.getWriter().WriteMessages(context.Background(), kafka.Message{
 		Topic: queue,
 		Key:   []byte(job.Uuid()),
 		Value: []byte(this.serializer.Serializer(job)),
-		Time:  time.Now(),
+		Time:  delay,
 	})
 	if err != nil {
 		logs.WithError(err).WithField("job", job).Debug("push on queue failed")
 	}
 }
 
-func (this *Kafka) PushRaw(payload, queue string, options ...contracts.Fields) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (this *Kafka) Later(delay interface{}, job contracts.Job, queue ...string) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (this *Kafka) LaterOn(queue string, delay interface{}, job contracts.Job) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (this *Kafka) Bulk(job contracts.Job, queue ...string) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (this *Kafka) Pop(queue ...string) contracts.Job {
-	//TODO implement me
-	panic("implement me")
-}
-
 func (this *Kafka) GetConnectionName() string {
 	return this.name
 }
 
-func (this *Kafka) SetConnectionName(queue string) contracts.Queue {
-	//TODO implement me
-	panic("implement me")
-}
-
 func (this *Kafka) Release(job contracts.Job, delay ...int) {
-	logs.Default().Info("release job" + job.Uuid())
+	delayAt := time.Now()
+	if len(delay) > 0 {
+		delayAt = delayAt.Add(time.Second * time.Duration(delay[0]))
+	}
+
+	this.Later(delayAt, job)
 }
 
 func (this *Kafka) Delete(job contracts.Job) {
@@ -164,7 +163,7 @@ func (this *Kafka) consume(reader *kafka.Reader, ch chan contracts.Msg) {
 			ch <- contracts.Msg{
 				Ack: func() {
 					if err = reader.CommitMessages(ctx, message); err != nil {
-						logs.WithError(err).Error("kafka.consume: CommitMessages failed")
+						logs.WithError(err).WithField("message", message).Error("kafka.consume: CommitMessages failed")
 					}
 				},
 				Job: job,
