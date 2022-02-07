@@ -6,6 +6,7 @@ import (
 	"github.com/goal-web/supports/exceptions"
 	"github.com/goal-web/supports/logs"
 	"github.com/qbhy/parallel"
+	"time"
 )
 
 type Worker struct {
@@ -30,7 +31,7 @@ func NewWorker(name string, queue contracts.Queue, config WorkerConfig, handler 
 func (worker *Worker) workQueue(queue contracts.Queue) {
 	defer func() {
 		if err := recover(); err != nil {
-			logs.WithException(exceptions.WithRecover(err, nil)).Error("workQueue failed")
+			logs.WithException(exceptions.WithRecover(err, nil)).Error("worker.workQueue failed")
 		}
 	}()
 	msgPipe := queue.Listen(worker.config.Queue...)
@@ -44,7 +45,11 @@ func (worker *Worker) workQueue(queue contracts.Queue) {
 					if job.GetAttemptsNum() >= job.GetMaxTries() || job.GetAttemptsNum() >= worker.config.Tries { // 达到最大尝试次数
 						worker.saveOnFailedJobs(msg.Job) // 保存到死信队列
 					} else {
-						queue.Release(job) // 放回队列中
+						// 放回队列中重试
+						if err = queue.Later(time.Now().Add(time.Second*time.Duration(job.GetRetryInterval())), job); err != nil {
+							logs.WithError(err).Warn("worker.workQueue: job release failed")
+							panic(err)
+						}
 					}
 					msg.Ack()
 					worker.exceptionHandler.Handle(JobException{Exception: exceptions.WithError(err, contracts.Fields{
@@ -55,7 +60,8 @@ func (worker *Worker) workQueue(queue contracts.Queue) {
 				}
 			})
 			if err != nil {
-				logs.WithError(err).Warn("workers failed")
+				logs.WithError(err).Warn("worker.workQueue: workers handle failed")
+				return
 			}
 		case <-worker.closeChan:
 			queue.Stop()

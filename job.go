@@ -10,29 +10,30 @@ import (
 var JobFailedErr = errors.New("job failed")
 
 type Job struct {
-	UUID       string           `json:"uuid"`
-	CreatedAt  int64            `json:"created_at"`
-	Queue      string           `json:"queue"`
-	Connection string           `json:"connection"`
-	Tries      int              `json:"tries"`
-	MaxTries   int              `json:"max_tries"`
-	IsDelete   bool             `json:"is_delete"`
-	Options    contracts.Fields `json:"options"`
-	IsRelease  bool             `json:"is_released"`
-	Error      error            `json:"error"`
-	Timeout    int
+	UUID          string           `json:"uuid"`
+	CreatedAt     int64            `json:"created_at"`
+	Queue         string           `json:"queue"`
+	Connection    string           `json:"connection"`
+	Tries         int              `json:"tries"`
+	MaxTries      int              `json:"max_tries"`
+	IsDelete      bool             `json:"is_delete"`
+	Options       contracts.Fields `json:"options"`
+	IsRelease     bool             `json:"is_released"`
+	Error         error            `json:"error"`
+	Timeout       int
+	RetryInterval int
 }
 
-func Base(queue string) *Job {
+func BaseJob(queue string) *Job {
 	return &Job{
-		UUID:       utils.RandStr(30),
-		CreatedAt:  time.Now().Unix(),
-		Queue:      queue,
-		Connection: queue,
-		Tries:      0,
-		MaxTries:   0,
-		IsDelete:   false,
-		Options:    nil,
+		UUID:          utils.RandStr(30),
+		CreatedAt:     time.Now().Unix(),
+		Queue:         queue,
+		Tries:         0,
+		MaxTries:      0,
+		IsDelete:      false,
+		Options:       nil,
+		RetryInterval: 3,
 	}
 }
 
@@ -81,6 +82,10 @@ func (job *Job) GetMaxTries() int {
 
 func (job *Job) GetAttemptsNum() int {
 	return job.Tries
+}
+
+func (job *Job) GetRetryInterval() int {
+	return job.RetryInterval
 }
 
 func (job *Job) IncrementAttemptsNum() {

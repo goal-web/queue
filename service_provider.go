@@ -20,7 +20,8 @@ func (this *ServiceProvider) Register(application contracts.Application) {
 			serializer: serializer,
 			queues:     map[string]contracts.Queue{},
 			queueDrivers: map[string]contracts.QueueDriver{
-				"kafka": drivers.Driver,
+				"kafka": drivers.KafkaDriver,
+				"nsq":   drivers.NsqDriver,
 			},
 			config: config.Get("queue").(Config),
 		}
