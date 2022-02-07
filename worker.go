@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"fmt"
 	"github.com/goal-web/contracts"
 	"github.com/goal-web/supports/exceptions"
 	"github.com/goal-web/supports/logs"
@@ -33,18 +34,19 @@ func (worker *Worker) workQueue(queue contracts.Queue) {
 		}
 	}()
 	msgPipe := queue.Listen(worker.config.Queue...)
+	logs.Default().Info(fmt.Sprintf("%s worker is working...", worker.name))
 	for {
 		select {
 		case msg := <-msgPipe:
 			err := worker.workers.Handle(func() {
 				job := msg.Job
 				if err := worker.handleJob(job); err != nil {
-					if job.GetAttemptsNum() >= job.GetMaxTries() { // 达到最大尝试次数
+					if job.GetAttemptsNum() >= job.GetMaxTries() || job.GetAttemptsNum() >= worker.config.Tries { // 达到最大尝试次数
 						worker.saveOnFailedJobs(msg.Job) // 保存到死信队列
-						msg.Ack()
 					} else {
 						queue.Release(job) // 放回队列中
 					}
+					msg.Ack()
 					worker.exceptionHandler.Handle(JobException{Exception: exceptions.WithError(err, contracts.Fields{
 						"msg": msg,
 					})})

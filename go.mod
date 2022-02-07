@@ -3,7 +3,7 @@ module github.com/goal-web/queue
 go 1.17
 
 require (
-	github.com/goal-web/contracts v0.1.32
+	github.com/goal-web/contracts v0.1.33
 	github.com/goal-web/supports v0.1.13
 	github.com/qbhy/parallel v1.4.0
 	github.com/segmentio/kafka-go v0.4.27
@@ -19,5 +19,3 @@ require (
 	golang.org/x/crypto v0.0.0-20220128200615-198e4374d7ed // indirect
 	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd // indirect
 )
-
-replace github.com/goal-web/contracts => ../contracts

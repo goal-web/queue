@@ -98,3 +98,7 @@ func (job *Job) GetConnectionName() string {
 func (job *Job) GetQueue() string {
 	return job.Queue
 }
+
+func (job *Job) SetQueue(queue string) {
+	job.Queue = queue
+}
