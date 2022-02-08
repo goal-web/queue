@@ -42,7 +42,8 @@ func (worker *Worker) workQueue(queue contracts.Queue) {
 			err := worker.workers.Handle(func() {
 				job := msg.Job
 				if err := worker.handleJob(job); err != nil {
-					if job.GetAttemptsNum() >= job.GetMaxTries() || job.GetAttemptsNum() >= worker.config.Tries { // 达到最大尝试次数
+					job.Fail(err)
+					if (job.GetMaxTries() > 0 && job.GetAttemptsNum() >= job.GetMaxTries()) || job.GetAttemptsNum() >= worker.config.Tries { // 达到最大尝试次数
 						worker.saveOnFailedJobs(msg.Job) // 保存到死信队列
 					} else {
 						// 放回队列中重试
