@@ -42,13 +42,21 @@ func (this *ServiceProvider) Start() error {
 
 // runWorkers 运行所有 worker
 func (this *ServiceProvider) runWorkers() {
-	this.app.Call(func(factory contracts.QueueFactory, config contracts.Config, handler contracts.ExceptionHandler) {
-		queueConfig := config.Get("queue").(Config)
-		env := this.app.Environment()
+	this.app.Call(func(factory contracts.QueueFactory, config contracts.Config, handler contracts.ExceptionHandler, db contracts.DBFactory, serializer contracts.ClassSerializer) {
+		var (
+			queueConfig = config.Get("queue").(Config)
+			env         = this.app.Environment()
+		)
 
 		if queueConfig.Workers[env] != nil {
 			for name, workerConfig := range queueConfig.Workers[env] {
-				worker := NewWorker(name, factory.Connection(workerConfig.Connection), workerConfig, handler)
+				worker := NewWorker(name, factory.Connection(workerConfig.Connection), WorkerParam{
+					handler:         handler,
+					db:              db.Connection(queueConfig.Failed.Database),
+					failedJobsTable: queueConfig.Failed.Table,
+					config:          workerConfig,
+					serializer:      serializer,
+				})
 				this.workers = append(this.workers, worker)
 				go worker.Work()
 			}

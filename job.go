@@ -9,17 +9,23 @@ import (
 
 var JobFailedErr = errors.New("job failed")
 
+type Error string
+
+func (e Error) Error() string {
+	return string(e)
+}
+
 type Job struct {
-	UUID          string           `json:"uuid"`
-	CreatedAt     int64            `json:"created_at"`
-	Queue         string           `json:"queue"`
-	Connection    string           `json:"connection"`
-	Tries         int              `json:"tries"`
-	MaxTries      int              `json:"max_tries"`
-	IsDelete      bool             `json:"is_delete"`
-	Options       contracts.Fields `json:"options"`
-	IsRelease     bool             `json:"is_released"`
-	Error         error            `json:"error"`
+	UUID          string           `json:"uuid,omitempty"`
+	CreatedAt     int64            `json:"created_at,omitempty"`
+	Queue         string           `json:"queue,omitempty"`
+	Connection    string           `json:"connection,omitempty"`
+	Tries         int              `json:"tries,omitempty"`
+	MaxTries      int              `json:"max_tries,omitempty"`
+	IsDelete      bool             `json:"is_delete,omitempty"`
+	Options       contracts.Fields `json:"options,omitempty"`
+	IsRelease     bool             `json:"is_released,omitempty"`
+	Error         *Error           `json:"error,omitempty"`
 	Timeout       int
 	RetryInterval int
 }
@@ -31,8 +37,6 @@ func BaseJob(queue string) *Job {
 		Queue:         queue,
 		Tries:         0,
 		MaxTries:      0,
-		IsDelete:      false,
-		Options:       nil,
 		RetryInterval: 3,
 	}
 }
@@ -69,11 +73,13 @@ func (job *Job) HasFailed() bool {
 }
 
 func (job *Job) MarkAsFailed() {
-	job.Error = JobFailedErr
+	job.Fail(JobFailedErr)
 }
 
 func (job *Job) Fail(err error) {
-	job.Error = err
+	var e Error
+	e = Error(err.Error())
+	job.Error = &e
 }
 
 func (job *Job) GetMaxTries() int {

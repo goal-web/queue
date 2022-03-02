@@ -6,6 +6,7 @@ import (
 	"github.com/goal-web/supports/exceptions"
 	"github.com/goal-web/supports/logs"
 	"github.com/qbhy/parallel"
+	"runtime/debug"
 	"time"
 )
 
@@ -16,15 +17,32 @@ type Worker struct {
 	exceptionHandler contracts.ExceptionHandler
 	workers          *parallel.Workers
 	config           WorkerConfig
+
+	db              contracts.DBConnection
+	serializer      contracts.ClassSerializer
+	failedJobsTable string
+	dbIsReady       bool // db 是否准备好了死信队列数据表
 }
 
-func NewWorker(name string, queue contracts.Queue, config WorkerConfig, handler contracts.ExceptionHandler) contracts.QueueWorker {
+type WorkerParam struct {
+	handler         contracts.ExceptionHandler
+	db              contracts.DBConnection
+	failedJobsTable string
+	config          WorkerConfig
+	serializer      contracts.ClassSerializer
+}
+
+func NewWorker(name string, queue contracts.Queue, param WorkerParam) contracts.QueueWorker {
 	return &Worker{
+		db:               param.db,
+		dbIsReady:        true,
+		failedJobsTable:  param.failedJobsTable,
+		serializer:       param.serializer,
 		name:             name,
 		queue:            queue,
 		closeChan:        make(chan bool),
-		exceptionHandler: handler,
-		config:           config,
+		exceptionHandler: param.handler,
+		config:           param.config,
 	}
 }
 
@@ -34,21 +52,24 @@ func (worker *Worker) workQueue(queue contracts.Queue) {
 			logs.WithException(exceptions.WithRecover(err, nil)).Error("worker.workQueue failed")
 		}
 	}()
-	msgPipe := queue.Listen(worker.config.Queue...)
-	logs.Default().Info(fmt.Sprintf("%s worker is working...", worker.name))
+	var msgPipe = queue.Listen(worker.config.Queue...)
+	logs.Default().Info(fmt.Sprintf("queue.Worker.workQueue: %s worker is working...", worker.name))
 	for {
 		select {
 		case msg := <-msgPipe:
-			err := worker.workers.Handle(func() {
-				job := msg.Job
+			var err = worker.workers.Handle(func() {
+				var job = msg.Job
 				if err := worker.handleJob(job); err != nil {
 					job.Fail(err)
 					if (job.GetMaxTries() > 0 && job.GetAttemptsNum() >= job.GetMaxTries()) || job.GetAttemptsNum() >= worker.config.Tries { // 达到最大尝试次数
-						worker.saveOnFailedJobs(msg.Job) // 保存到死信队列
+						// 保存到死信队列
+						if saveErr := worker.saveOnFailedJobs(msg.Job); saveErr != nil {
+							panic(err)
+						}
 					} else {
 						// 放回队列中重试
 						if err = queue.Later(time.Now().Add(time.Second*time.Duration(job.GetRetryInterval())), job); err != nil {
-							logs.WithError(err).Warn("worker.workQueue: job release failed")
+							logs.WithError(err).Warn("queue.Worker.workQueue: job release failed")
 							panic(err)
 						}
 					}
@@ -81,8 +102,30 @@ func (worker *Worker) Stop() {
 	worker.workers.Stop()
 }
 
-func (worker *Worker) saveOnFailedJobs(job contracts.Job) {
-	logs.Default().WithField("job", job).Info("saveOnFailedJobs")
+// saveOnFailedJobs 保存死信
+func (worker *Worker) saveOnFailedJobs(job contracts.Job) (err error) {
+	if worker.dbIsReady && worker.db != nil {
+		_, err = worker.db.Exec(
+			fmt.Sprintf("insert into %s (connection, queue, payload, exception) values ('%s','%s','%s','%s')",
+				worker.failedJobsTable,
+				job.GetConnectionName(),
+				job.GetQueue(),
+				worker.serializer.Serialize(job),
+				debug.Stack(),
+			),
+		)
+		if err != nil {
+			logs.WithError(err).Warn("queue.Worker.saveOnFailedJobs: Failed to save to database")
+			worker.dbIsReady = false
+		}
+	}
+
+	if err != nil || !worker.dbIsReady { // 如果没有配置数据库死信，或者保存到数据库失败了
+		if err = worker.queue.Push(job, fmt.Sprintf("deaded_%s", job.GetQueue())); err != nil {
+			logs.WithError(err).Error("queue.Worker.saveOnFailedJobs: failed to save")
+		}
+	}
+	return
 }
 
 func (worker *Worker) handleJob(job contracts.Job) (err error) {

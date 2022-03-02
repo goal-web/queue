@@ -134,10 +134,10 @@ func (this *Nsq) Listen(queue ...string) chan contracts.Msg {
 
 func (this *Nsq) consume(consumer *nsq.Consumer, ch chan contracts.Msg) {
 	consumer.AddHandler(nsq.HandlerFunc(func(message *nsq.Message) error {
-		job, err := this.serializer.Unserialize(string(message.Body))
+		var job, err = this.serializer.Unserialize(string(message.Body))
 		if err != nil {
 			logs.WithError(err).WithField("msg", string(message.Body)).Error("nsq.consume: Unserialize job failed")
-			return err
+			return nil
 		}
 		ackChan := make(chan error)
 		ch <- contracts.Msg{

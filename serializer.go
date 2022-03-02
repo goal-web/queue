@@ -22,7 +22,7 @@ func (this *Serializer) Serializer(job contracts.Job) string {
 }
 
 func (this *Serializer) Unserialize(serialized string) (contracts.Job, error) {
-	result, err := this.serializer.Parse(serialized)
+	var result, err = this.serializer.Parse(serialized)
 	if err != nil {
 		return nil, err
 	}
