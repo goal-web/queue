@@ -59,7 +59,9 @@ func (worker *Worker) workQueue(queue contracts.Queue) {
 		case msg := <-msgPipe:
 			var err = worker.workers.Handle(func() {
 				var job = msg.Job
+				logs.Default().WithField("job", job).Debug(fmt.Sprintf("queue.Worker.workQueue: processing job"))
 				if err := worker.handleJob(job); err != nil {
+					logs.Default().WithField("job", job).Debug(fmt.Sprintf("queue.Worker.workQueue: Failed to process job"))
 					job.Fail(err)
 					if (job.GetMaxTries() > 0 && job.GetAttemptsNum() >= job.GetMaxTries()) || job.GetAttemptsNum() >= worker.config.Tries { // 达到最大尝试次数
 						// 保存到死信队列
@@ -78,11 +80,11 @@ func (worker *Worker) workQueue(queue contracts.Queue) {
 						"msg": msg,
 					})})
 				} else {
+					logs.Default().WithField("job", job).Debug(fmt.Sprintf("queue.Worker.workQueue: Processing job succeeded"))
 					msg.Ack()
 				}
 			})
 			if err != nil {
-				logs.WithError(err).Warn("worker.workQueue: workers handle failed")
 				return
 			}
 		case <-worker.closeChan:
