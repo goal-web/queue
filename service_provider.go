@@ -12,9 +12,6 @@ type ServiceProvider struct {
 
 func (this *ServiceProvider) Register(application contracts.Application) {
 
-	application.Singleton("job.serializer", func(serializer contracts.ClassSerializer) contracts.JobSerializer {
-		return NewJobSerializer(serializer)
-	})
 	application.Singleton("queue.factory", func(config contracts.Config, serializer contracts.JobSerializer) contracts.QueueFactory {
 		return &Factory{
 			serializer: serializer,
