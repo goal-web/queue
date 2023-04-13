@@ -17,12 +17,12 @@ func NewJobSerializer(serializer contracts.ClassSerializer) contracts.JobSeriali
 	return &Serializer{serializer: serializer}
 }
 
-func (this *Serializer) Serializer(job contracts.Job) string {
-	return this.serializer.Serialize(job)
+func (serializer *Serializer) Serializer(job contracts.Job) string {
+	return serializer.serializer.Serialize(job)
 }
 
-func (this *Serializer) Unserialize(serialized string) (contracts.Job, error) {
-	var result, err = this.serializer.Parse(serialized)
+func (serializer *Serializer) Unserialize(serialized string) (contracts.Job, error) {
+	var result, err = serializer.serializer.Parse(serialized)
 	if err != nil {
 		return nil, err
 	}

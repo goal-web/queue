@@ -41,51 +41,51 @@ type Kafka struct {
 	writer       *kafka.Writer
 }
 
-func (this *Kafka) getQueue(queues []string, queue string) string {
+func (k *Kafka) getQueue(queues []string, queue string) string {
 	if len(queues) > 0 {
 		return queues[0]
 	}
 	if queue != "" {
 		return queue
 	}
-	return this.defaultQueue
+	return k.defaultQueue
 }
 
-func (this *Kafka) getReader(queue string) *kafka.Reader {
-	if this.readers[queue] != nil {
-		return this.readers[queue]
+func (k *Kafka) getReader(queue string) *kafka.Reader {
+	if k.readers[queue] != nil {
+		return k.readers[queue]
 	}
-	this.readers[queue] = kafka.NewReader(kafka.ReaderConfig{
-		Brokers: this.brokers,
-		GroupID: this.name,
+	k.readers[queue] = kafka.NewReader(kafka.ReaderConfig{
+		Brokers: k.brokers,
+		GroupID: k.name,
 		Topic:   queue,
-		Dialer:  this.dialer,
+		Dialer:  k.dialer,
 	})
-	return this.readers[queue]
+	return k.readers[queue]
 }
 
-func (this *Kafka) getWriter() *kafka.Writer {
-	if this.writer != nil {
-		return this.writer
+func (k *Kafka) getWriter() *kafka.Writer {
+	if k.writer != nil {
+		return k.writer
 	}
-	this.writer = &kafka.Writer{
-		Addr:     kafka.TCP(this.brokers[0]),
+	k.writer = &kafka.Writer{
+		Addr:     kafka.TCP(k.brokers[0]),
 		Balancer: &kafka.LeastBytes{},
 	}
-	return this.writer
+	return k.writer
 }
 
-func (this *Kafka) Push(job contracts.Job, queue ...string) error {
-	return this.PushOn(this.getQueue(queue, job.GetQueue()), job)
+func (k *Kafka) Push(job contracts.Job, queue ...string) error {
+	return k.PushOn(k.getQueue(queue, job.GetQueue()), job)
 }
 
-func (this *Kafka) PushOn(queue string, job contracts.Job) error {
+func (k *Kafka) PushOn(queue string, job contracts.Job) error {
 	job.SetQueue(queue)
 
-	err := this.getWriter().WriteMessages(context.Background(), kafka.Message{
+	err := k.getWriter().WriteMessages(context.Background(), kafka.Message{
 		Topic: queue,
 		Key:   []byte(job.Uuid()),
-		Value: []byte(this.serializer.Serializer(job)),
+		Value: []byte(k.serializer.Serializer(job)),
 	})
 	if err != nil {
 		logs.WithError(err).WithField("job", job).Debug("push on queue failed")
@@ -93,8 +93,8 @@ func (this *Kafka) PushOn(queue string, job contracts.Job) error {
 	return err
 }
 
-func (this *Kafka) PushRaw(payload, queue string, options ...contracts.Fields) error {
-	err := this.getWriter().WriteMessages(context.Background(), kafka.Message{
+func (k *Kafka) PushRaw(payload, queue string, options ...contracts.Fields) error {
+	err := k.getWriter().WriteMessages(context.Background(), kafka.Message{
 		Topic: queue,
 		Key:   []byte(utils.RandStr(5)),
 		Value: []byte(payload),
@@ -108,17 +108,17 @@ func (this *Kafka) PushRaw(payload, queue string, options ...contracts.Fields) e
 	return err
 }
 
-func (this *Kafka) Later(delay time.Time, job contracts.Job, queue ...string) error {
-	return this.LaterOn(this.getQueue(queue, job.GetQueue()), delay, job)
+func (k *Kafka) Later(delay time.Time, job contracts.Job, queue ...string) error {
+	return k.LaterOn(k.getQueue(queue, job.GetQueue()), delay, job)
 }
 
-func (this *Kafka) LaterOn(queue string, delay time.Time, job contracts.Job) error {
+func (k *Kafka) LaterOn(queue string, delay time.Time, job contracts.Job) error {
 	job.SetQueue(queue)
 
-	err := this.getWriter().WriteMessages(context.Background(), kafka.Message{
-		Topic: this.delayQueue,
+	err := k.getWriter().WriteMessages(context.Background(), kafka.Message{
+		Topic: k.delayQueue,
 		Key:   []byte(job.Uuid()),
-		Value: []byte(this.serializer.Serializer(job)),
+		Value: []byte(k.serializer.Serializer(job)),
 		Time:  delay,
 	})
 	if err != nil {
@@ -127,37 +127,37 @@ func (this *Kafka) LaterOn(queue string, delay time.Time, job contracts.Job) err
 	return err
 }
 
-func (this *Kafka) GetConnectionName() string {
-	return this.name
+func (k *Kafka) GetConnectionName() string {
+	return k.name
 }
 
-func (this *Kafka) Release(job contracts.Job, delay ...int) error {
+func (k *Kafka) Release(job contracts.Job, delay ...int) error {
 	delayAt := time.Now()
 	if len(delay) > 0 {
 		delayAt = delayAt.Add(time.Second * time.Duration(delay[0]))
 	}
 
-	return this.Later(delayAt, job)
+	return k.Later(delayAt, job)
 }
 
-func (this *Kafka) Stop() {
-	this.stopped = true
+func (k *Kafka) Stop() {
+	k.stopped = true
 }
 
-func (this *Kafka) Listen(queue ...string) chan contracts.Msg {
-	this.stopped = false
+func (k *Kafka) Listen(queue ...string) chan contracts.Msg {
+	k.stopped = false
 	ch := make(chan contracts.Msg)
 	for _, name := range queue {
-		go this.consume(this.getReader(name), ch)
+		go k.consume(k.getReader(name), ch)
 	}
-	go this.maintainDelayQueue()
+	go k.maintainDelayQueue()
 	return ch
 }
 
-func (this *Kafka) consume(reader *kafka.Reader, ch chan contracts.Msg) {
+func (k *Kafka) consume(reader *kafka.Reader, ch chan contracts.Msg) {
 	ctx := context.Background()
 	for {
-		if this.stopped {
+		if k.stopped {
 			break
 		}
 		msg, err := reader.FetchMessage(ctx)
@@ -169,7 +169,7 @@ func (this *Kafka) consume(reader *kafka.Reader, ch chan contracts.Msg) {
 			logs.Default().Info("未来的消息" + msg.Time.String() + string(msg.Value))
 			continue
 		}
-		job, err := this.serializer.Unserialize(string(msg.Value))
+		job, err := k.serializer.Unserialize(string(msg.Value))
 		if err != nil {
 			logs.WithError(err).WithField("msg", string(msg.Value)).WithField("config", reader.Config()).Error("kafka.consume: Unserialize job failed")
 			break
@@ -187,11 +187,11 @@ func (this *Kafka) consume(reader *kafka.Reader, ch chan contracts.Msg) {
 	}
 }
 
-func (this *Kafka) maintainDelayQueue() {
-	reader := this.getReader(this.delayQueue)
+func (k *Kafka) maintainDelayQueue() {
+	reader := k.getReader(k.delayQueue)
 	ctx := context.Background()
 	for {
-		if this.stopped {
+		if k.stopped {
 			break
 		}
 		msg, err := reader.FetchMessage(ctx)
@@ -199,14 +199,14 @@ func (this *Kafka) maintainDelayQueue() {
 			logs.WithError(err).WithField("config", reader.Config()).Error("kafka.maintainDelayQueue: FetchMessage failed")
 			break
 		}
-		job, err := this.serializer.Unserialize(string(msg.Value))
+		job, err := k.serializer.Unserialize(string(msg.Value))
 		if err != nil {
 			logs.WithError(err).WithField("msg", string(msg.Value)).WithField("config", reader.Config()).Error("kafka.consume: Unserialize job failed")
 			break
 		}
 		if msg.Time.Sub(time.Now()) > 0 { // 还没到时间
 			go (func(message kafka.Message) {
-				err = this.LaterOn(job.GetQueue(), msg.Time, job)
+				err = k.LaterOn(job.GetQueue(), msg.Time, job)
 				if err != nil {
 					logs.WithError(err).WithField("queue", string(message.Value)).Error("kafka.maintainDelayQueue: LaterOn failed")
 					return
@@ -217,7 +217,7 @@ func (this *Kafka) maintainDelayQueue() {
 			})(msg)
 		} else {
 			go (func(message kafka.Message) {
-				if err = this.PushOn(job.GetQueue(), job); err != nil {
+				if err = k.PushOn(job.GetQueue(), job); err != nil {
 					logs.WithError(err).WithField("queue", job.GetQueue()).Error("kafka.maintainDelayQueue: PushOn failed")
 					return
 				}

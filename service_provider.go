@@ -3,15 +3,22 @@ package queue
 import (
 	"github.com/goal-web/contracts"
 	"github.com/goal-web/queue/drivers"
+	"github.com/goal-web/supports/logs"
 )
 
 type ServiceProvider struct {
-	app     contracts.Application
-	workers []contracts.QueueWorker
+	app         contracts.Application
+	workers     []contracts.QueueWorker
+	stopChan    chan error
+	withWorkers bool
 }
 
-func (this *ServiceProvider) Register(application contracts.Application) {
+func NewService(withWorkers bool) contracts.ServiceProvider {
+	return &ServiceProvider{withWorkers: withWorkers}
+}
 
+func (provider *ServiceProvider) Register(application contracts.Application) {
+	provider.app = application
 	application.Singleton("queue.factory", func(config contracts.Config, serializer contracts.JobSerializer) contracts.QueueFactory {
 		return &Factory{
 			serializer: serializer,
@@ -29,23 +36,30 @@ func (this *ServiceProvider) Register(application contracts.Application) {
 	application.Singleton("job.serializer", func(serializer contracts.ClassSerializer) contracts.JobSerializer {
 		return NewJobSerializer(serializer)
 	})
-	this.app = application
 }
 
-func (this *ServiceProvider) Start() error {
-	this.runWorkers()
+func (provider *ServiceProvider) Start() error {
+	logs.Default().Info("queue.ServiceProvider: starting...")
+	if provider.withWorkers {
+		err := provider.runWorkers()
+		if err != nil {
+			logs.Default().WithError(err).Error("queue.ServiceProvider: abnormal exit.")
+		} else {
+			logs.Default().Info("queue.ServiceProvider: finished.")
+		}
+		return err
+	}
 	return nil
 }
 
 // runWorkers 运行所有 worker
-func (this *ServiceProvider) runWorkers() {
-	this.app.Call(func(factory contracts.QueueFactory, config contracts.Config, handler contracts.ExceptionHandler, db contracts.DBFactory, serializer contracts.ClassSerializer) {
-		var (
-			queueConfig = config.Get("queue").(Config)
-			env         = this.app.Environment()
-		)
+func (provider *ServiceProvider) runWorkers() error {
+	provider.app.Call(func(factory contracts.QueueFactory, config contracts.Config, handler contracts.ExceptionHandler, db contracts.DBFactory, serializer contracts.ClassSerializer) {
+		var queueConfig = config.Get("queue").(Config)
+		var env = config.GetString("app.env")
 
 		if queueConfig.Workers[env] != nil {
+			provider.stopChan = make(chan error, len(queueConfig.Workers[env]))
 			for name, workerConfig := range queueConfig.Workers[env] {
 				worker := NewWorker(name, factory.Connection(workerConfig.Connection), WorkerParam{
 					handler:         handler,
@@ -53,16 +67,29 @@ func (this *ServiceProvider) runWorkers() {
 					failedJobsTable: queueConfig.Failed.Table,
 					config:          workerConfig,
 					serializer:      serializer,
+					failChan:        provider.stopChan,
 				})
-				this.workers = append(this.workers, worker)
+				provider.workers = append(provider.workers, worker)
 				go worker.Work()
 			}
 		}
 	})
+	if provider.stopChan != nil {
+		return <-provider.stopChan
+	}
+	return nil
 }
 
-func (this *ServiceProvider) Stop() {
-	for _, worker := range this.workers {
-		worker.Stop()
+func (provider *ServiceProvider) Stop() {
+	logs.Default().Info("queue.ServiceProvider: stopping...")
+	if provider.withWorkers {
+		for _, worker := range provider.workers {
+			worker.Stop()
+		}
+		logs.Default().Debug("queue.workers closed")
+		if provider.stopChan != nil {
+			provider.stopChan <- nil
+			close(provider.stopChan)
+		}
 	}
 }

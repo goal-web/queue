@@ -42,7 +42,5 @@ func (factory *Factory) Queue(name string) contracts.Queue {
 		return factory.queues[name]
 	}
 
-	panic(DriverException{
-		Exception: exceptions.New(fmt.Sprintf("unsupported queue driver：%s", driver), config),
-	})
+	panic(DriverException{Err: exceptions.New(fmt.Sprintf("unsupported queue driver：%s", driver))})
 }

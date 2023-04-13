@@ -1,15 +1,11 @@
 package queue
 
-import "github.com/goal-web/contracts"
+import (
+	"github.com/goal-web/supports/exceptions"
+)
 
-type Exception struct {
-	contracts.Exception
-}
+type Exception = exceptions.Exception
 
-type DriverException struct {
-	contracts.Exception
-}
+type DriverException = exceptions.Exception
 
-type JobException struct {
-	contracts.Exception
-}
+type JobException = exceptions.Exception

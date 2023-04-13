@@ -33,128 +33,123 @@ type Nsq struct {
 	lookupAddresses []string
 	defaultQueue    string
 	serializer      contracts.JobSerializer
-	stopped         bool
 	config          *nsq.Config
 	consumers       map[string]*nsq.Consumer
 	producer        *nsq.Producer
 }
 
-func (this *Nsq) getQueue(queues []string, queue string) string {
+func (client *Nsq) getQueue(queues []string, queue string) string {
 	if len(queues) > 0 {
 		return queues[0]
 	}
 	if queue != "" {
 		return queue
 	}
-	return this.defaultQueue
+	return client.defaultQueue
 }
 
-func (this *Nsq) getConsumer(queue string) *nsq.Consumer {
-	if this.consumers[queue] != nil {
-		return this.consumers[queue]
+func (client *Nsq) getConsumer(queue string) *nsq.Consumer {
+	if client.consumers[queue] != nil {
+		return client.consumers[queue]
 	}
-	consumer, err := nsq.NewConsumer(queue, "channel", this.config)
+	consumer, err := nsq.NewConsumer(queue, "channel", client.config)
 	if err != nil {
 		panic(err)
 	}
 
-	this.consumers[queue] = consumer
+	client.consumers[queue] = consumer
 	return consumer
 }
 
-func (this *Nsq) getProducer() *nsq.Producer {
-	if this.producer != nil {
-		return this.producer
+func (client *Nsq) getProducer() *nsq.Producer {
+	if client.producer != nil {
+		return client.producer
 	}
 
-	producer, err := nsq.NewProducer(this.address, this.config)
+	producer, err := nsq.NewProducer(client.address, client.config)
 
 	if err != nil {
 		panic(err)
 	}
 
-	this.producer = producer
+	client.producer = producer
 
-	return this.producer
+	return client.producer
 }
 
-func (this *Nsq) Push(job contracts.Job, queue ...string) error {
-	return this.PushOn(this.getQueue(queue, job.GetQueue()), job)
+func (client *Nsq) Push(job contracts.Job, queue ...string) error {
+	return client.PushOn(client.getQueue(queue, job.GetQueue()), job)
 }
 
-func (this *Nsq) PushOn(queue string, job contracts.Job) error {
+func (client *Nsq) PushOn(queue string, job contracts.Job) error {
 	job.SetQueue(queue)
-	return this.getProducer().Publish(queue, []byte(this.serializer.Serializer(job)))
+	return client.getProducer().Publish(queue, []byte(client.serializer.Serializer(job)))
 }
 
-func (this *Nsq) PushRaw(payload, queue string, options ...contracts.Fields) error {
-	return this.getProducer().Publish(queue, []byte(payload))
+func (client *Nsq) PushRaw(payload, queue string, options ...contracts.Fields) error {
+	return client.getProducer().Publish(queue, []byte(payload))
 }
 
-func (this *Nsq) Later(delay time.Time, job contracts.Job, queue ...string) error {
-	return this.LaterOn(this.getQueue(queue, job.GetQueue()), delay, job)
+func (client *Nsq) Later(delay time.Time, job contracts.Job, queue ...string) error {
+	return client.LaterOn(client.getQueue(queue, job.GetQueue()), delay, job)
 }
 
-func (this *Nsq) LaterOn(queue string, delay time.Time, job contracts.Job) error {
+func (client *Nsq) LaterOn(queue string, delay time.Time, job contracts.Job) error {
 	job.SetQueue(queue)
 
-	return this.getProducer().DeferredPublish(queue, delay.Sub(time.Now()), []byte(this.serializer.Serializer(job)))
+	return client.getProducer().DeferredPublish(queue, delay.Sub(time.Now()), []byte(client.serializer.Serializer(job)))
 }
 
-func (this *Nsq) GetConnectionName() string {
-	return this.name
+func (client *Nsq) GetConnectionName() string {
+	return client.name
 }
 
-func (this *Nsq) Release(job contracts.Job, delay ...int) error {
+func (client *Nsq) Release(job contracts.Job, delay ...int) error {
 	delayAt := time.Now()
 	if len(delay) > 0 {
 		delayAt = delayAt.Add(time.Second * time.Duration(delay[0]))
 	}
 
-	return this.Later(delayAt, job)
+	return client.Later(delayAt, job)
 }
 
-func (this *Nsq) Stop() {
-	this.stopped = true
-	for _, consumer := range this.consumers {
+func (client *Nsq) Stop() {
+	for _, consumer := range client.consumers {
 		consumer.Stop()
 	}
 }
 
-func (this *Nsq) Listen(queue ...string) chan contracts.Msg {
-	this.stopped = false
+func (client *Nsq) Listen(queue ...string) chan contracts.Msg {
 	ch := make(chan contracts.Msg)
 
 	for _, name := range queue {
-		this.consume(this.getConsumer(name), ch)
+		client.consume(client.getConsumer(name), ch)
 	}
 
 	return ch
 }
 
-func (this *Nsq) consume(consumer *nsq.Consumer, ch chan contracts.Msg) {
+func (client *Nsq) consume(consumer *nsq.Consumer, ch chan contracts.Msg) {
 	consumer.AddHandler(nsq.HandlerFunc(func(message *nsq.Message) error {
-		var job, err = this.serializer.Unserialize(string(message.Body))
+		var job, err = client.serializer.Unserialize(string(message.Body))
 		if err != nil {
 			logs.WithError(err).WithField("msg", string(message.Body)).Error("nsq.consume: Unserialize job failed")
 			return nil
 		}
 		ackChan := make(chan error)
 		ch <- contracts.Msg{
-			Ack: func() {
-				ackChan <- nil
-			},
+			Ack: func() { ackChan <- nil },
 			Job: job,
 		}
 		return <-ackChan
 	}))
 
-	if len(this.lookupAddresses) > 0 && this.lookupAddresses[0] != "" {
-		if err := consumer.ConnectToNSQLookupds(this.lookupAddresses); err != nil {
+	if len(client.lookupAddresses) > 0 && client.lookupAddresses[0] != "" {
+		if err := consumer.ConnectToNSQLookupds(client.lookupAddresses); err != nil {
 			panic(err)
 		}
 	} else {
-		if err := consumer.ConnectToNSQD(this.address); err != nil {
+		if err := consumer.ConnectToNSQD(client.address); err != nil {
 			panic(err)
 		}
 	}

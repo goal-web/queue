@@ -21,6 +21,7 @@ type Worker struct {
 	db              contracts.DBConnection
 	serializer      contracts.ClassSerializer
 	failedJobsTable string
+	failChan        chan error
 	dbIsReady       bool // db 是否准备好了死信队列数据表
 }
 
@@ -30,6 +31,7 @@ type WorkerParam struct {
 	failedJobsTable string
 	config          WorkerConfig
 	serializer      contracts.ClassSerializer
+	failChan        chan error
 }
 
 func NewWorker(name string, queue contracts.Queue, param WorkerParam) contracts.QueueWorker {
@@ -43,13 +45,16 @@ func NewWorker(name string, queue contracts.Queue, param WorkerParam) contracts.
 		closeChan:        make(chan bool),
 		exceptionHandler: param.handler,
 		config:           param.config,
+		failChan:         param.failChan,
 	}
 }
 
 func (worker *Worker) workQueue(queue contracts.Queue) {
 	defer func() {
 		if err := recover(); err != nil {
-			logs.WithException(exceptions.WithRecover(err, nil)).Error("worker.workQueue failed")
+			e := exceptions.WithRecover(err)
+			logs.WithException(e).Error("worker.workQueue failed")
+			worker.failChan <- e
 		}
 	}()
 	var msgPipe = queue.Listen(worker.config.Queue...)
@@ -76,9 +81,7 @@ func (worker *Worker) workQueue(queue contracts.Queue) {
 						}
 					}
 					msg.Ack()
-					worker.exceptionHandler.Handle(JobException{Exception: exceptions.WithError(err, contracts.Fields{
-						"msg": msg,
-					})})
+					worker.exceptionHandler.Handle(&JobException{Err: err})
 				} else {
 					logs.Default().WithField("job", job).Debug(fmt.Sprintf("queue.Worker.workQueue: Processing job succeeded"))
 					msg.Ack()
@@ -102,12 +105,13 @@ func (worker *Worker) Work() {
 func (worker *Worker) Stop() {
 	worker.closeChan <- true
 	worker.workers.Stop()
+	logs.Default().Info(fmt.Sprintf("queue.Worker.workQueue: %s worker is stopped.", worker.name))
 }
 
 // saveOnFailedJobs 保存死信
 func (worker *Worker) saveOnFailedJobs(job contracts.Job) (err error) {
 	if worker.dbIsReady && worker.db != nil {
-		_, err = worker.db.Exec(
+		_, exception := worker.db.Exec(
 			fmt.Sprintf("insert into %s (connection, queue, payload, exception) values ('%s','%s','%s','%s')",
 				worker.failedJobsTable,
 				job.GetConnectionName(),
@@ -116,8 +120,9 @@ func (worker *Worker) saveOnFailedJobs(job contracts.Job) (err error) {
 				debug.Stack(),
 			),
 		)
-		if err != nil {
-			logs.WithError(err).Warn("queue.Worker.saveOnFailedJobs: Failed to save to database")
+		if exception != nil {
+			err = exception
+			logs.WithException(exception).Warn("queue.Worker.saveOnFailedJobs: Failed to save to database")
 			worker.dbIsReady = false
 		}
 	}
@@ -132,9 +137,7 @@ func (worker *Worker) saveOnFailedJobs(job contracts.Job) (err error) {
 
 func (worker *Worker) handleJob(job contracts.Job) (err error) {
 	defer func() {
-		if panicValue := recover(); panicValue != nil {
-			err = exceptions.ResolveException(panicValue)
-		}
+		err = exceptions.WithRecover(recover())
 	}()
 
 	job.IncrementAttemptsNum()
