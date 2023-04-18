@@ -26,6 +26,8 @@ func (provider *ServiceProvider) Register(application contracts.Application) {
 			queueDrivers: map[string]contracts.QueueDriver{
 				"kafka": drivers.KafkaDriver,
 				"nsq":   drivers.NsqDriver,
+				"sync":  drivers.SyncDriver,
+				"empty": drivers.EmptyDriver,
 			},
 			config: config.Get("queue").(Config),
 		}
