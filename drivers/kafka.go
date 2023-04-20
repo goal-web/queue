@@ -144,9 +144,9 @@ func (k *Kafka) Stop() {
 	k.stopped = true
 }
 
-func (k *Kafka) Listen(queue ...string) chan contracts.Msg {
+func (k *Kafka) Listen(queue ...string) chan contracts.QueueMsg {
 	k.stopped = false
-	ch := make(chan contracts.Msg)
+	ch := make(chan contracts.QueueMsg)
 	for _, name := range queue {
 		go k.consume(k.getReader(name), ch)
 	}
@@ -154,7 +154,7 @@ func (k *Kafka) Listen(queue ...string) chan contracts.Msg {
 	return ch
 }
 
-func (k *Kafka) consume(reader *kafka.Reader, ch chan contracts.Msg) {
+func (k *Kafka) consume(reader *kafka.Reader, ch chan contracts.QueueMsg) {
 	ctx := context.Background()
 	for {
 		if k.stopped {
@@ -175,7 +175,7 @@ func (k *Kafka) consume(reader *kafka.Reader, ch chan contracts.Msg) {
 			break
 		}
 		(func(message kafka.Message) {
-			ch <- contracts.Msg{
+			ch <- contracts.QueueMsg{
 				Ack: func() {
 					if err = reader.CommitMessages(ctx, message); err != nil {
 						logs.WithError(err).WithField("message", message).Error("kafka.consume: CommitMessages failed")

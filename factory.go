@@ -7,14 +7,14 @@ import (
 	"github.com/goal-web/supports/utils"
 )
 
-type Factory struct {
+type Manager struct {
 	queues       map[string]contracts.Queue
 	queueDrivers map[string]contracts.QueueDriver
 	config       Config
 	serializer   contracts.JobSerializer
 }
 
-func (factory *Factory) Connection(name ...string) contracts.Queue {
+func (factory *Manager) Connection(name ...string) contracts.Queue {
 	if len(name) > 0 {
 		return factory.Queue(name[0])
 	}
@@ -22,11 +22,11 @@ func (factory *Factory) Connection(name ...string) contracts.Queue {
 	return factory.Queue(factory.config.Defaults.Connection)
 }
 
-func (factory *Factory) Extend(name string, driver contracts.QueueDriver) {
+func (factory *Manager) Extend(name string, driver contracts.QueueDriver) {
 	factory.queueDrivers[name] = driver
 }
 
-func (factory *Factory) Queue(name string) contracts.Queue {
+func (factory *Manager) Queue(name string) contracts.Queue {
 	if queue, exists := factory.queues[name]; exists {
 		return queue
 	}

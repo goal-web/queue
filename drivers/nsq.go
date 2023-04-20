@@ -119,8 +119,8 @@ func (client *Nsq) Stop() {
 	}
 }
 
-func (client *Nsq) Listen(queue ...string) chan contracts.Msg {
-	ch := make(chan contracts.Msg)
+func (client *Nsq) Listen(queue ...string) chan contracts.QueueMsg {
+	ch := make(chan contracts.QueueMsg)
 
 	for _, name := range queue {
 		client.consume(client.getConsumer(name), ch)
@@ -129,7 +129,7 @@ func (client *Nsq) Listen(queue ...string) chan contracts.Msg {
 	return ch
 }
 
-func (client *Nsq) consume(consumer *nsq.Consumer, ch chan contracts.Msg) {
+func (client *Nsq) consume(consumer *nsq.Consumer, ch chan contracts.QueueMsg) {
 	consumer.AddHandler(nsq.HandlerFunc(func(message *nsq.Message) error {
 		var job, err = client.serializer.Unserialize(string(message.Body))
 		if err != nil {
@@ -137,7 +137,7 @@ func (client *Nsq) consume(consumer *nsq.Consumer, ch chan contracts.Msg) {
 			return nil
 		}
 		ackChan := make(chan error)
-		ch <- contracts.Msg{
+		ch <- contracts.QueueMsg{
 			Ack: func() { ackChan <- nil },
 			Job: job,
 		}

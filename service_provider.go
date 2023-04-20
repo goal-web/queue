@@ -19,20 +19,21 @@ func NewService(withWorkers bool) contracts.ServiceProvider {
 
 func (provider *ServiceProvider) Register(application contracts.Application) {
 	provider.app = application
-	application.Singleton("queue.factory", func(config contracts.Config, serializer contracts.JobSerializer) contracts.QueueFactory {
-		return &Factory{
+	application.Singleton("queue.factory", func(config contracts.Config, serializer contracts.JobSerializer) contracts.QueueManager {
+		return &Manager{
 			serializer: serializer,
 			queues:     map[string]contracts.Queue{},
 			queueDrivers: map[string]contracts.QueueDriver{
-				"kafka": drivers.KafkaDriver,
-				"nsq":   drivers.NsqDriver,
-				"sync":  drivers.SyncDriver,
-				"empty": drivers.EmptyDriver,
+				"kafka":     drivers.KafkaDriver,
+				"nsq":       drivers.NsqDriver,
+				"sync":      drivers.SyncDriver,
+				"empty":     drivers.EmptyDriver,
+				"goroutine": drivers.GoroutineDriver,
 			},
 			config: config.Get("queue").(Config),
 		}
 	})
-	application.Singleton("queue", func(factory contracts.QueueFactory) contracts.Queue {
+	application.Singleton("queue", func(factory contracts.QueueManager) contracts.Queue {
 		return factory.Connection()
 	})
 	application.Singleton("job.serializer", func(serializer contracts.ClassSerializer) contracts.JobSerializer {
@@ -56,7 +57,7 @@ func (provider *ServiceProvider) Start() error {
 
 // runWorkers 运行所有 worker
 func (provider *ServiceProvider) runWorkers() error {
-	provider.app.Call(func(factory contracts.QueueFactory, config contracts.Config, handler contracts.ExceptionHandler, db contracts.DBFactory, serializer contracts.ClassSerializer) {
+	provider.app.Call(func(factory contracts.QueueManager, config contracts.Config, handler contracts.ExceptionHandler, db contracts.DBFactory, serializer contracts.ClassSerializer) {
 		var queueConfig = config.Get("queue").(Config)
 		var env = config.GetString("app.env")
 

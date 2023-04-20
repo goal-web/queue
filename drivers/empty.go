@@ -7,13 +7,13 @@ import (
 
 type Empty struct {
 	name string
-	ch   chan contracts.Msg
+	ch   chan contracts.QueueMsg
 }
 
 func EmptyDriver(name string, config contracts.Fields, serializer contracts.JobSerializer) contracts.Queue {
 	return &Empty{
 		name: name,
-		ch:   make(chan contracts.Msg),
+		ch:   make(chan contracts.QueueMsg),
 	}
 }
 
@@ -45,7 +45,7 @@ func (sync Empty) Release(job contracts.Job, delay ...int) error {
 	return nil
 }
 
-func (sync Empty) Listen(queue ...string) chan contracts.Msg {
+func (sync Empty) Listen(queue ...string) chan contracts.QueueMsg {
 	return sync.ch
 }
 

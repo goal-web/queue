@@ -9,13 +9,13 @@ import (
 
 type Sync struct {
 	name string
-	ch   chan contracts.Msg
+	ch   chan contracts.QueueMsg
 }
 
 func SyncDriver(name string, config contracts.Fields, serializer contracts.JobSerializer) contracts.Queue {
 	return &Sync{
 		name: name,
-		ch:   make(chan contracts.Msg),
+		ch:   make(chan contracts.QueueMsg),
 	}
 }
 
@@ -61,7 +61,7 @@ func (sync Sync) Release(job contracts.Job, delay ...int) error {
 	return nil
 }
 
-func (sync Sync) Listen(queue ...string) chan contracts.Msg {
+func (sync Sync) Listen(queue ...string) chan contracts.QueueMsg {
 	return sync.ch
 }
 
