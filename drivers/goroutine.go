@@ -52,7 +52,7 @@ func (goroutine *Goroutine) PushRaw(payload, queue string, options ...contracts.
 
 func (goroutine *Goroutine) Later(delay time.Time, job contracts.Job, queue ...string) error {
 	go func() {
-		time.Sleep(time.Now().Sub(delay))
+		time.Sleep(delay.Sub(time.Now()))
 		if err := goroutine.Push(job, queue...); err != nil {
 			logs.Default().
 				WithField("conn", goroutine.name).
