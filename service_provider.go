@@ -19,7 +19,7 @@ func NewService(withWorkers bool) contracts.ServiceProvider {
 
 func (provider *ServiceProvider) Register(application contracts.Application) {
 	provider.app = application
-	application.Singleton("queue.factory", func(config contracts.Config, serializer contracts.JobSerializer) contracts.QueueManager {
+	application.Singleton("queue.manager", func(config contracts.Config, serializer contracts.JobSerializer) contracts.QueueManager {
 		return &Manager{
 			serializer: serializer,
 			queues:     map[string]contracts.Queue{},

@@ -3,7 +3,6 @@ package drivers
 import (
 	"github.com/goal-web/contracts"
 	"github.com/goal-web/supports/exceptions"
-	"github.com/goal-web/supports/logs"
 	"time"
 )
 
@@ -36,21 +35,11 @@ func (sync Sync) PushRaw(payload, queue string, options ...contracts.Fields) err
 }
 
 func (sync Sync) Later(delay time.Time, job contracts.Job, queue ...string) error {
-	go func() {
-		time.Sleep(time.Now().Sub(delay))
-		if err := sync.Push(job); err != nil {
-			logs.Default().
-				WithField("conn", sync.name).
-				WithField("queue", queue).
-				WithError(err).
-				Error("Failed to process sync queue.")
-		}
-	}()
-	return nil
+	return sync.Push(job, queue...)
 }
 
 func (sync Sync) LaterOn(queue string, delay time.Time, job contracts.Job) error {
-	return sync.Later(delay, job, queue)
+	return sync.Push(job, queue)
 }
 
 func (sync Sync) GetConnectionName() string {

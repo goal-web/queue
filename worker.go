@@ -58,7 +58,7 @@ func (worker *Worker) workQueue(queue contracts.Queue) {
 		}
 	}()
 	var msgPipe = queue.Listen(worker.config.Queue...)
-	logs.Default().Info(fmt.Sprintf("queue.Worker.workQueue: %s worker is working...", worker.name))
+	logs.Default().Info(fmt.Sprintf("queue.Worker.workQueue: The worker [%s] is working...", worker.name))
 	for {
 		select {
 		case msg := <-msgPipe:
