@@ -165,7 +165,7 @@ func (k *Kafka) consume(reader *kafka.Reader, ch chan contracts.QueueMsg) {
 			logs.WithError(err).WithField("config", reader.Config()).Error("kafka.consume: FetchMessage failed")
 			break
 		}
-		if msg.Time.Sub(time.Now()) > 0 {
+		if time.Until(msg.Time) > 0 {
 			logs.Default().Info("未来的消息" + msg.Time.String() + string(msg.Value))
 			continue
 		}
@@ -204,7 +204,7 @@ func (k *Kafka) maintainDelayQueue() {
 			logs.WithError(err).WithField("msg", string(msg.Value)).WithField("config", reader.Config()).Error("kafka.consume: Unserialize job failed")
 			break
 		}
-		if msg.Time.Sub(time.Now()) > 0 { // 还没到时间
+		if time.Until(msg.Time) > 0 { // 还没到时间
 			go (func(message kafka.Message) {
 				err = k.LaterOn(job.GetQueue(), msg.Time, job)
 				if err != nil {

@@ -77,8 +77,7 @@ func (job *Job) MarkAsFailed() {
 }
 
 func (job *Job) Fail(err error) {
-	var e Error
-	e = Error(err.Error())
+	e := Error(err.Error())
 	job.Error = &e
 }
 

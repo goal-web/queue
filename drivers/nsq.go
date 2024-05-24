@@ -97,7 +97,7 @@ func (client *Nsq) Later(delay time.Time, job contracts.Job, queue ...string) er
 func (client *Nsq) LaterOn(queue string, delay time.Time, job contracts.Job) error {
 	job.SetQueue(queue)
 
-	return client.getProducer().DeferredPublish(queue, delay.Sub(time.Now()), []byte(client.serializer.Serializer(job)))
+	return client.getProducer().DeferredPublish(queue, time.Until(delay), []byte(client.serializer.Serializer(job)))
 }
 
 func (client *Nsq) GetConnectionName() string {
