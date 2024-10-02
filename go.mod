@@ -1,6 +1,6 @@
 module github.com/goal-web/queue
 
-go 1.20
+go 1.23.1
 
 require (
 	github.com/nsqio/go-nsq v1.1.0
